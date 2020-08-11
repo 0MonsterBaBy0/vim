@@ -18,7 +18,7 @@ func Test_define_var_with_lock()
     const n = v:null
     const bl = 0zC0FFEE
     const here =<< trim EOS
-    hello
+      hello
     EOS
 
     call assert_true(exists('i'))
@@ -84,7 +84,7 @@ func Test_define_l_var_with_lock()
     const l:n = v:null
     const l:bl = 0zC0FFEE
     const l:here =<< trim EOS
-    hello
+      hello
     EOS
 
     call assert_fails('let l:i = 1', 'E741:')
@@ -125,7 +125,7 @@ func Test_define_script_var_with_lock()
     unlet s:x
 endfunc
 
-func Test_descructuring_with_lock()
+func Test_destructuring_with_lock()
     const [a, b, c] = [1, 1.1, 'vim']
 
     call assert_fails('let a = 1', 'E741:')
@@ -197,6 +197,26 @@ func Test_cannot_modify_existing_variable()
     call assert_fails('const [i2, f2, s2] = [1, 1.1, "vim"]', 'E995:')
 endfunc
 
+func Test_const_with_condition()
+  const x = 0
+  if 0 | const x = 1 | endif
+  call assert_equal(0, x)
+endfunc
+
+func Test_lockvar()
+  let x = 'hello'
+  lockvar x
+  call assert_fails('let x = "there"', 'E741')
+  if 0 | unlockvar x | endif
+  call assert_fails('let x = "there"', 'E741')
+  unlockvar x
+  let x = 'there'
+
+  if 0 | lockvar x | endif
+  let x = 'again'
+endfunc
+
+
 func Test_const_with_index_access()
     let l = [1, 2, 3]
     call assert_fails('const l[0] = 4', 'E996:')
@@ -231,6 +251,14 @@ func Test_const_with_special_variables()
     call assert_fails('const &filetype = "vim"', 'E996:')
     call assert_fails('const &l:filetype = "vim"', 'E996:')
     call assert_fails('const &g:encoding = "utf-8"', 'E996:')
+
+    call assert_fails('const [a, $CONST_FOO] = [369, "abc"]', 'E996:')
+    call assert_equal(369, a)
+    call assert_equal(v:null, getenv("CONST_FOO"))
+
+    call assert_fails('const [b; $CONST_FOO] = [246, 2, "abc"]', 'E996:')
+    call assert_equal(246, b)
+    call assert_equal(v:null, getenv("CONST_FOO"))
 endfunc
 
 func Test_const_with_eval_name()
@@ -256,3 +284,5 @@ func Test_lock_depth_is_1()
     let d['bar'] = 'hello'
     let d.foo = 44
 endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

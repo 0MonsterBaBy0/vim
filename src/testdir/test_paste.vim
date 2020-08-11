@@ -1,12 +1,10 @@
 " Tests for bracketed paste and other forms of pasting.
 
 " Bracketed paste only works with "xterm".  Not in GUI or Windows console.
-if has('win32')
-  throw 'Skipped: does not work on MS-Windows'
-endif
-if has('gui_running')
-  throw 'Skipped: does not work in the GUI'
-endif
+source check.vim
+CheckNotMSWindows
+CheckNotGui
+
 set term=xterm
 
 source shared.vim
@@ -72,9 +70,8 @@ func Test_paste_insert_mode()
 endfunc
 
 func Test_paste_clipboard()
-  if !WorkingClipboard()
-    return
-  endif
+  CheckFeature clipboard_working
+
   let @+ = "nasty\<Esc>:!ls\<CR>command"
   new
   exe "normal i\<C-R>+\<Esc>"
@@ -82,9 +79,25 @@ func Test_paste_clipboard()
   bwipe!
 endfunc
 
+" bracketed paste in command line
 func Test_paste_cmdline()
   call feedkeys(":a\<Esc>[200~foo\<CR>bar\<Esc>[201~b\<Home>\"\<CR>", 'xt')
   call assert_equal("\"afoo\<CR>barb", getreg(':'))
+endfunc
+
+" bracketed paste in Ex-mode
+func Test_paste_ex_mode()
+  unlet! foo
+  call feedkeys("Qlet foo=\"\<Esc>[200~foo\<CR>bar\<Esc>[201~\"\<CR>vi\<CR>", 'xt')
+  call assert_equal("foo\rbar", foo)
+endfunc
+
+func Test_paste_onechar()
+  new
+  let @f='abc'
+  call feedkeys("i\<C-R>\<Esc>[200~foo\<CR>bar\<Esc>[201~", 'xt')
+  call assert_equal("abc", getline(1))
+  close!
 endfunc
 
 func Test_paste_visual_mode()
@@ -137,3 +150,5 @@ func Test_xrestore()
 
   bwipe!
 endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

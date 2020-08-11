@@ -1,23 +1,18 @@
 " Tests for 'balloonevalterm'.
 " A few tests only work in the terminal.
 
-if has('gui_running')
-  throw 'Skipped: only work in the terminal'
-endif
-
 source check.vim
+CheckNotGui
 CheckFeature balloon_eval_term
 
 source screendump.vim
-if !CanRunVimInTerminal()
-  throw 'Skipped: cannot make screendumps'
-endif
+CheckScreendump
 
-let s:common_script =<< [CODE]
+let s:common_script =<< trim [CODE]
   call setline(1, ["one one one", "two tXo two", "three three three"])
   set balloonevalterm balloonexpr=MyBalloonExpr() balloondelay=100
   func MyBalloonExpr()
-    return "line " .. v:beval_lnum .. " column " .. v:beval_col .. ": " .. v:beval_text
+    return "line " .. v:beval_lnum .. " column " .. v:beval_col .. ":\n" .. v:beval_text
   endfun
   redraw
 [CODE]
@@ -25,15 +20,27 @@ let s:common_script =<< [CODE]
 func Test_balloon_eval_term()
   " Use <Ignore> after <MouseMove> to return from vgetc() without removing
   " the balloon.
-  call writefile(s:common_script + [
-	\ 'call test_setmouse(2, 6)',
-	\ 'call feedkeys("\<MouseMove>\<Ignore>", "xt")',
-	\ ], 'XTest_beval')
+  let xtra_lines =<< trim [CODE]
+    set updatetime=300
+    au CursorHold * echo 'hold fired'
+    func Trigger()
+      call test_setmouse(2, 6)
+      call feedkeys("\<MouseMove>\<Ignore>", "xt")
+    endfunc
+  [CODE]
+  call writefile(s:common_script + xtra_lines, 'XTest_beval')
 
   " Check that the balloon shows up after a mouse move
   let buf = RunVimInTerminal('-S XTest_beval', {'rows': 10, 'cols': 50})
-  call term_wait(buf, 100)
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, 'll')
+  call term_sendkeys(buf, ":call Trigger()\<CR>")
   call VerifyScreenDump(buf, 'Test_balloon_eval_term_01', {})
+
+  " Make sure the balloon still shows after 'updatetime' passed and CursorHold
+  " was triggered.
+  call TermWait(buf, 150)
+  call VerifyScreenDump(buf, 'Test_balloon_eval_term_01a', {})
 
   " clean up
   call StopVimInTerminal(buf)
@@ -50,7 +57,7 @@ func Test_balloon_eval_term_visual()
 
   " Check that the balloon shows up after a mouse move
   let buf = RunVimInTerminal('-S XTest_beval_visual', {'rows': 10, 'cols': 50})
-  call term_wait(buf, 100)
+  call TermWait(buf, 50)
   call VerifyScreenDump(buf, 'Test_balloon_eval_term_02', {})
 
   " clean up

@@ -1,9 +1,10 @@
 " Tests for when a file was changed outside of Vim.
 
+source check.vim
+
 func Test_FileChangedShell_reload()
-  if !has('unix')
-    return
-  endif
+  CheckUnix
+
   augroup testreload
     au FileChangedShell Xchanged_r let g:reason = v:fcs_reason | let v:fcs_choice = 'reload'
   augroup END
@@ -91,9 +92,8 @@ func Test_FileChangedShell_reload()
 endfunc
 
 func Test_file_changed_dialog()
-  if !has('unix') || has('gui_running')
-    return
-  endif
+  CheckUnix
+  CheckNotGui
   au! FileChangedShell
 
   new Xchanged_d
@@ -138,11 +138,35 @@ func Test_file_changed_dialog()
   sleep 2
   silent !touch Xchanged_d
   let v:warningmsg = ''
-  checktime
+  checktime Xchanged_d
   call assert_equal('', v:warningmsg)
   call assert_equal(1, line('$'))
   call assert_equal('new line', getline(1))
 
+  " File created after starting to edit it
+  call delete('Xchanged_d')
+  new Xchanged_d
+  call writefile(['one'], 'Xchanged_d')
+  call feedkeys('L', 'L')
+  checktime Xchanged_d
+  call assert_equal(['one'], getline(1, '$'))
+  close!
+
   bwipe!
   call delete('Xchanged_d')
 endfunc
+
+" Test for editing a new buffer from a FileChangedShell autocmd
+func Test_FileChangedShell_newbuf()
+  call writefile(['one', 'two'], 'Xfile')
+  new Xfile
+  augroup testnewbuf
+    autocmd FileChangedShell * enew
+  augroup END
+  call writefile(['red'], 'Xfile')
+  call assert_fails('checktime', 'E811:')
+  au! testnewbuf
+  call delete('Xfile')
+endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

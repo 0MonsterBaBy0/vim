@@ -1,6 +1,8 @@
 " Tests for autocommands
 
 source shared.vim
+source check.vim
+source term_util.vim
 
 func s:cleanup_buffers() abort
   for bnr in range(1, bufnr('$'))
@@ -15,6 +17,35 @@ func Test_vim_did_enter()
 
   " This script will never reach the main loop, can't check if v:vim_did_enter
   " becomes one.
+endfunc
+
+" Test for the CursorHold autocmd
+func Test_CursorHold_autocmd()
+  CheckRunVimInTerminal
+  call writefile(['one', 'two', 'three'], 'Xfile')
+  let before =<< trim END
+    set updatetime=10
+    au CursorHold * call writefile([line('.')], 'Xoutput', 'a')
+  END
+  call writefile(before, 'Xinit')
+  let buf = RunVimInTerminal('-S Xinit Xfile', {})
+  call term_wait(buf)
+  call term_sendkeys(buf, "gg")
+  call term_wait(buf)
+  sleep 50m
+  call term_sendkeys(buf, "j")
+  call term_wait(buf)
+  sleep 50m
+  call term_sendkeys(buf, "j")
+  call term_wait(buf)
+  sleep 50m
+  call StopVimInTerminal(buf)
+
+  call assert_equal(['1', '2', '3'], readfile('Xoutput')[-3:-1])
+
+  call delete('Xinit')
+  call delete('Xoutput')
+  call delete('Xfile')
 endfunc
 
 if has('timers')
@@ -166,9 +197,7 @@ func Test_autocmd_bufunload_avoiding_SEGV_01()
     exe 'autocmd BufUnload <buffer> ' . (lastbuf + 1) . 'bwipeout!'
   augroup END
 
-  " Todo: check for E937 generated first
-  " call assert_fails('edit bb.txt', 'E937:')
-  call assert_fails('edit bb.txt', 'E517:')
+  call assert_fails('edit bb.txt', ['E937:', 'E517:'])
 
   autocmd! test_autocmd_bufunload
   augroup! test_autocmd_bufunload
@@ -297,6 +326,8 @@ func Test_augroup_warning()
   redir END
   call assert_true(match(res, "W19:") < 0)
   au! VimEnter
+
+  call assert_fails('augroup!', 'E471:')
 endfunc
 
 func Test_BufReadCmdHelp()
@@ -438,7 +469,7 @@ func Test_autocmd_bufwipe_in_SessLoadPost()
   [CODE]
 
   call writefile(content, 'Xvimrc')
-  call system(v:progpath. ' -u Xvimrc --not-a-term --noplugins -S Session.vim -c cq')
+  call system(GetVimCommand('Xvimrc') .. ' --not-a-term --noplugins -S Session.vim -c cq')
   let errors = join(readfile('Xerrors'))
   call assert_match('E814', errors)
 
@@ -478,7 +509,7 @@ func Test_autocmd_bufwipe_in_SessLoadPost2()
   [CODE]
 
   call writefile(content, 'Xvimrc')
-  call system(v:progpath. ' -u Xvimrc --not-a-term --noplugins -S Session.vim -c cq')
+  call system(GetVimCommand('Xvimrc') .. ' --not-a-term --noplugins -S Session.vim -c cq')
   let errors = join(readfile('Xerrors'))
   " This probably only ever matches on unix.
   call assert_notmatch('Caught deadly signal SEGV', errors)
@@ -1090,7 +1121,7 @@ func Test_OptionSet()
   call assert_equal(g:opt[0], g:opt[1])
 
 
-  " 33: Test autocomands when an option value is converted internally.
+  " 33: Test autocommands when an option value is converted internally.
   noa set backspace=1 " Reset global and local value (without triggering autocmd)
   let g:options=[['backspace', 'indent,eol', 'indent,eol', 'indent,eol', '2', 'global', 'set']]
   set backspace=2
@@ -1155,6 +1186,7 @@ func Test_OptionSet_diffmode_close()
   call setline(1, ['buffer 2', 'line 2', 'line 3', 'line4'])
   call assert_fails(':diffthis', 'E788')
   call assert_equal(1, &diff)
+  set diffopt-=closeoff
   bw!
   call assert_fails(':diffoff!', 'E788')
   bw!
@@ -1421,7 +1453,7 @@ func Test_bufunload_all()
   call writefile(content, 'Xtest')
 
   call delete('Xout')
-  call system(v:progpath. ' --clean -N --not-a-term -S Xtest')
+  call system(GetVimCommandClean() .. ' -N --not-a-term -S Xtest')
   call assert_true(filereadable('Xout'))
 
   call delete('Xxx1')
@@ -1533,6 +1565,40 @@ func Test_Cmd_Autocmds()
   enew!
 endfunc
 
+func s:ReadFile()
+  setl noswapfile nomodified
+  let filename = resolve(expand("<afile>:p"))
+  execute 'read' fnameescape(filename)
+  1d_
+  exe 'file' fnameescape(filename)
+  setl buftype=acwrite
+endfunc
+
+func s:WriteFile()
+  let filename = resolve(expand("<afile>:p"))
+  setl buftype=
+  noautocmd execute 'write' fnameescape(filename)
+  setl buftype=acwrite
+  setl nomodified
+endfunc
+
+func Test_BufReadCmd()
+  autocmd BufReadCmd *.test call s:ReadFile()
+  autocmd BufWriteCmd *.test call s:WriteFile()
+
+  call writefile(['one', 'two', 'three'], 'Xcmd.test')
+  edit Xcmd.test
+  call assert_match('Xcmd.test" line 1 of 3', execute('file'))
+  normal! Gofour
+  write
+  call assert_equal(['one', 'two', 'three', 'four'], readfile('Xcmd.test'))
+
+  bwipe!
+  call delete('Xcmd.test')
+  au! BufReadCmd
+  au! BufWriteCmd
+endfunc
+
 func SetChangeMarks(start, end)
   exe a:start. 'mark ['
   exe a:end. 'mark ]'
@@ -1552,7 +1618,7 @@ func Test_change_mark_in_autocmds()
   write
   au! BufWritePre
 
-  if executable('cat')
+  if has('unix')
     write XtestFilter
     write >> XtestFilter
 
@@ -1673,23 +1739,27 @@ func Test_TextYankPost()
 
   norm "ayiw
   call assert_equal(
-    \{'regcontents': ['foo'], 'regname': 'a', 'operator': 'y', 'regtype': 'v'},
+    \{'regcontents': ['foo'], 'regname': 'a', 'operator': 'y', 'regtype': 'v', 'visual': v:false},
     \g:event)
   norm y_
   call assert_equal(
-    \{'regcontents': ['foo'], 'regname': '',  'operator': 'y', 'regtype': 'V'},
+    \{'regcontents': ['foo'], 'regname': '',  'operator': 'y', 'regtype': 'V', 'visual': v:false},
+    \g:event)
+  norm Vy
+  call assert_equal(
+    \{'regcontents': ['foo'], 'regname': '',  'operator': 'y', 'regtype': 'V', 'visual': v:true},
     \g:event)
   call feedkeys("\<C-V>y", 'x')
   call assert_equal(
-    \{'regcontents': ['f'], 'regname': '',  'operator': 'y', 'regtype': "\x161"},
+    \{'regcontents': ['f'], 'regname': '',  'operator': 'y', 'regtype': "\x161", 'visual': v:true},
     \g:event)
   norm "xciwbar
   call assert_equal(
-    \{'regcontents': ['foo'], 'regname': 'x', 'operator': 'c', 'regtype': 'v'},
+    \{'regcontents': ['foo'], 'regname': 'x', 'operator': 'c', 'regtype': 'v', 'visual': v:false},
     \g:event)
   norm "bdiw
   call assert_equal(
-    \{'regcontents': ['bar'], 'regname': 'b', 'operator': 'd', 'regtype': 'v'},
+    \{'regcontents': ['bar'], 'regname': 'b', 'operator': 'd', 'regtype': 'v', 'visual': v:false},
     \g:event)
 
   call assert_equal({}, v:event)
@@ -1702,18 +1772,18 @@ endfunc
 func Test_nocatch_wipe_all_buffers()
   " Real nasty autocommand: wipe all buffers on any event.
   au * * bwipe *
-  " Get E93 first?
-  " call assert_fails('next x', 'E93:')
-  call assert_fails('next x', 'E517:')
+  call assert_fails('next x', ['E94:', 'E517:'])
   bwipe
   au!
 endfunc
 
 func Test_nocatch_wipe_dummy_buffer()
-  " Nasty autocommand: wipe buffer on any event.
-  au * x bwipe
-  call assert_fails('lv½ /x', 'E480')
-  au!
+  if has('quickfix')
+    " Nasty autocommand: wipe buffer on any event.
+    au * x bwipe
+    call assert_fails('lv½ /x', 'E937')
+    au!
+  endif
 endfunc
 
 function s:Before_test_dirchanged()
@@ -1722,14 +1792,14 @@ function s:Before_test_dirchanged()
   augroup END
   let s:li = []
   let s:dir_this = getcwd()
-  let s:dir_foo = s:dir_this . '/foo'
+  let s:dir_foo = s:dir_this . '/Xfoo'
   call mkdir(s:dir_foo)
-  let s:dir_bar = s:dir_this . '/bar'
+  let s:dir_bar = s:dir_this . '/Xbar'
   call mkdir(s:dir_bar)
 endfunc
 
 function s:After_test_dirchanged()
-  exe 'cd' s:dir_this
+  call chdir(s:dir_this)
   call delete(s:dir_foo, 'd')
   call delete(s:dir_bar, 'd')
   augroup test_dirchanged
@@ -1741,11 +1811,11 @@ function Test_dirchanged_global()
   call s:Before_test_dirchanged()
   autocmd test_dirchanged DirChanged global call add(s:li, "cd:")
   autocmd test_dirchanged DirChanged global call add(s:li, expand("<afile>"))
-  exe 'cd' s:dir_foo
+  call chdir(s:dir_foo)
   call assert_equal(["cd:", s:dir_foo], s:li)
-  exe 'cd' s:dir_foo
+  call chdir(s:dir_foo)
   call assert_equal(["cd:", s:dir_foo], s:li)
-  exe 'lcd' s:dir_bar
+  exe 'lcd ' .. fnameescape(s:dir_bar)
   call assert_equal(["cd:", s:dir_foo], s:li)
   call s:After_test_dirchanged()
 endfunc
@@ -1754,11 +1824,11 @@ function Test_dirchanged_local()
   call s:Before_test_dirchanged()
   autocmd test_dirchanged DirChanged window call add(s:li, "lcd:")
   autocmd test_dirchanged DirChanged window call add(s:li, expand("<afile>"))
-  exe 'cd' s:dir_foo
+  call chdir(s:dir_foo)
   call assert_equal([], s:li)
-  exe 'lcd' s:dir_bar
+  exe 'lcd ' .. fnameescape(s:dir_bar)
   call assert_equal(["lcd:", s:dir_bar], s:li)
-  exe 'lcd' s:dir_bar
+  exe 'lcd ' .. fnameescape(s:dir_bar)
   call assert_equal(["lcd:", s:dir_bar], s:li)
   call s:After_test_dirchanged()
 endfunc
@@ -1772,7 +1842,7 @@ function Test_dirchanged_auto()
   autocmd test_dirchanged DirChanged auto call add(s:li, "auto:")
   autocmd test_dirchanged DirChanged auto call add(s:li, expand("<afile>"))
   set acd
-  exe 'cd ..'
+  cd ..
   call assert_equal([], s:li)
   exe 'edit ' . s:dir_foo . '/Xfile'
   call assert_equal(s:dir_foo, getcwd())
@@ -1861,9 +1931,11 @@ func Test_TextChangedI_with_setline()
 endfunc
 
 func Test_Changed_FirstTime()
-  if !has('terminal') || has('gui_running')
-    return
-  endif
+  CheckFeature terminal
+  CheckNotGui
+  " Starting a terminal to run Vim is always considered flaky.
+  let g:test_is_flaky = 1
+
   " Prepare file for TextChanged event.
   call writefile([''], 'Xchanged.txt')
   let buf = term_start([GetVimProg(), '--clean', '-c', 'set noswapfile'], {'term_rows': 3})
@@ -1960,12 +2032,12 @@ endfunc
 func Test_autocmd_bufreadpre()
   new
   let b:bufreadpre = 1
-  call append(0, range(100))
+  call append(0, range(1000))
   w! XAutocmdBufReadPre.txt
   autocmd BufReadPre <buffer> :let b:bufreadpre += 1
-  norm! 50gg
+  norm! 500gg
   sp
-  norm! 100gg
+  norm! 1000gg
   wincmd p
   let g:wsv1 = winsaveview()
   wincmd p
@@ -2224,3 +2296,373 @@ func Test_throw_in_BufWritePre()
   bwipe!
   au! throwing
 endfunc
+
+func Test_autocmd_SafeState()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+	let g:safe = 0
+	let g:again = ''
+	au SafeState * let g:safe += 1
+	au SafeStateAgain * let g:again ..= 'x'
+	func CallTimer()
+	  call timer_start(10, {id -> execute('let g:again ..= "t"')})
+	endfunc
+  END
+  call writefile(lines, 'XSafeState')
+  let buf = RunVimInTerminal('-S XSafeState', #{rows: 6})
+
+  " Sometimes we loop to handle a K_IGNORE, SafeState may be trigered once or
+  " more often.
+  call term_sendkeys(buf, ":echo g:safe\<CR>")
+  call WaitForAssert({-> assert_match('^\d ', term_getline(buf, 6))}, 1000)
+
+  " SafeStateAgain should be invoked at least three times
+  call term_sendkeys(buf, ":echo g:again\<CR>")
+  call WaitForAssert({-> assert_match('^xxx', term_getline(buf, 6))}, 1000)
+
+  call term_sendkeys(buf, ":let g:again = ''\<CR>:call CallTimer()\<CR>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, ":\<CR>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, ":echo g:again\<CR>")
+  call WaitForAssert({-> assert_match('xtx', term_getline(buf, 6))}, 1000)
+
+  call StopVimInTerminal(buf)
+  call delete('XSafeState')
+endfunc
+
+func Test_autocmd_CmdWinEnter()
+  CheckRunVimInTerminal
+  " There is not cmdwin switch, so
+  " test for cmdline_hist
+  " (both are available with small builds)
+  CheckFeature cmdline_hist
+  let lines =<< trim END
+    let b:dummy_var = 'This is a dummy'
+    autocmd CmdWinEnter * quit
+    let winnr = winnr('$')
+  END
+  let filename='XCmdWinEnter'
+  call writefile(lines, filename)
+  let buf = RunVimInTerminal('-S '.filename, #{rows: 6})
+
+  call term_sendkeys(buf, "q:")
+  call TermWait(buf)
+  call term_sendkeys(buf, ":echo b:dummy_var\<cr>")
+  call WaitForAssert({-> assert_match('^This is a dummy', term_getline(buf, 6))}, 2000)
+  call term_sendkeys(buf, ":echo &buftype\<cr>")
+  call WaitForAssert({-> assert_notmatch('^nofile', term_getline(buf, 6))}, 1000)
+  call term_sendkeys(buf, ":echo winnr\<cr>")
+  call WaitForAssert({-> assert_match('^1', term_getline(buf, 6))}, 1000)
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete(filename)
+endfunc
+
+func Test_autocmd_was_using_freed_memory()
+  CheckFeature quickfix
+
+  pedit xx
+  n x
+  au WinEnter * quit
+  split
+  au! WinEnter
+endfunc
+
+func Test_BufWrite_lockmarks()
+  edit! Xtest
+  call setline(1, ['a', 'b', 'c', 'd'])
+
+  " :lockmarks preserves the marks
+  call SetChangeMarks(2, 3)
+  lockmarks write
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  " *WritePre autocmds get the correct line range, but lockmarks preserves the
+  " original values for the user
+  augroup lockmarks
+    au!
+    au BufWritePre,FilterWritePre * call assert_equal([1, 4], [line("'["), line("']")])
+    au FileWritePre * call assert_equal([3, 4], [line("'["), line("']")])
+  augroup END
+
+  lockmarks write
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  if executable('cat')
+    lockmarks %!cat
+    call assert_equal([2, 3], [line("'["), line("']")])
+  endif
+
+  lockmarks 3,4write Xtest2
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  au! lockmarks
+  augroup! lockmarks
+  call delete('Xtest')
+  call delete('Xtest2')
+endfunc
+
+func Test_FileType_spell()
+  if !isdirectory('/tmp')
+    throw "Skipped: requires /tmp directory"
+  endif
+
+  " this was crashing with an invalid free()
+  setglobal spellfile=/tmp/en.utf-8.add
+  augroup crash
+    autocmd!
+    autocmd BufNewFile,BufReadPost crashfile setf somefiletype
+    autocmd BufNewFile,BufReadPost crashfile set ft=anotherfiletype
+    autocmd FileType anotherfiletype setlocal spell
+  augroup END
+  func! NoCrash() abort
+    edit /tmp/crashfile
+  endfunc
+  call NoCrash()
+
+  au! crash
+  setglobal spellfile=
+endfunc
+
+" Test closing a window or editing another buffer from a FileChangedRO handler
+" in a readonly buffer
+func Test_FileChangedRO_winclose()
+  augroup FileChangedROTest
+    au!
+    autocmd FileChangedRO * quit
+  augroup END
+  new
+  set readonly
+  call assert_fails('normal i', 'E788:')
+  close
+  augroup! FileChangedROTest
+
+  augroup FileChangedROTest
+    au!
+    autocmd FileChangedRO * edit Xfile
+  augroup END
+  new
+  set readonly
+  call assert_fails('normal i', 'E788:')
+  close
+  augroup! FileChangedROTest
+endfunc
+
+func LogACmd()
+  call add(g:logged, line('$'))
+endfunc
+
+func Test_TermChanged()
+  CheckNotGui
+
+  enew!
+  tabnew
+  call setline(1, ['a', 'b', 'c', 'd'])
+  $
+  au TermChanged * call LogACmd()
+  let g:logged = []
+  let term_save = &term
+  set term=xterm
+  call assert_equal([1, 4], g:logged)
+
+  au! TermChanged
+  let &term = term_save
+  bwipe!
+endfunc
+
+" Test for FileReadCmd autocmd
+func Test_autocmd_FileReadCmd()
+  func ReadFileCmd()
+    call append(line('$'), "v:cmdarg = " .. v:cmdarg)
+  endfunc
+  augroup FileReadCmdTest
+    au!
+    au FileReadCmd Xtest call ReadFileCmd()
+  augroup END
+
+  new
+  read ++bin Xtest
+  read ++nobin Xtest
+  read ++edit Xtest
+  read ++bad=keep Xtest
+  read ++bad=drop Xtest
+  read ++bad=- Xtest
+  read ++ff=unix Xtest
+  read ++ff=dos Xtest
+  read ++ff=mac Xtest
+  read ++enc=utf-8 Xtest
+
+  call assert_equal(['',
+        \ 'v:cmdarg =  ++bin',
+        \ 'v:cmdarg =  ++nobin',
+        \ 'v:cmdarg =  ++edit',
+        \ 'v:cmdarg =  ++bad=keep',
+        \ 'v:cmdarg =  ++bad=drop',
+        \ 'v:cmdarg =  ++bad=-',
+        \ 'v:cmdarg =  ++ff=unix',
+        \ 'v:cmdarg =  ++ff=dos',
+        \ 'v:cmdarg =  ++ff=mac',
+        \ 'v:cmdarg =  ++enc=utf-8'], getline(1, '$'))
+
+  close!
+  augroup FileReadCmdTest
+    au!
+  augroup END
+  delfunc ReadFileCmd
+endfunc
+
+" Test for passing invalid arguments to autocmd
+func Test_autocmd_invalid_args()
+  " Additional character after * for event
+  call assert_fails('autocmd *a Xfile set ff=unix', 'E215:')
+  augroup Test
+  augroup END
+  " Invalid autocmd event
+  call assert_fails('autocmd Bufabc Xfile set ft=vim', 'E216:')
+  " Invalid autocmd event in a autocmd group
+  call assert_fails('autocmd Test Bufabc Xfile set ft=vim', 'E216:')
+  augroup! Test
+  " Execute all autocmds
+  call assert_fails('doautocmd * BufEnter', 'E217:')
+  call assert_fails('augroup! x1a2b3', 'E367:')
+  call assert_fails('autocmd BufNew <buffer=999> pwd', 'E680:')
+endfunc
+
+" Test for deep nesting of autocmds
+func Test_autocmd_deep_nesting()
+  autocmd BufEnter Xfile doautocmd BufEnter Xfile
+  call assert_fails('doautocmd BufEnter Xfile', 'E218:')
+  autocmd! BufEnter Xfile
+endfunc
+
+" Tests for SigUSR1 autocmd event, which is only available on posix systems.
+func Test_autocmd_sigusr1()
+  CheckUnix
+
+  let g:sigusr1_passed = 0
+  au SigUSR1 * let g:sigusr1_passed = 1
+  call system('/bin/kill -s usr1 ' . getpid())
+  call WaitForAssert({-> assert_true(g:sigusr1_passed)})
+
+  au! SigUSR1
+  unlet g:sigusr1_passed
+endfunc
+
+" Test for BufReadPre autocmd deleting the file
+func Test_BufReadPre_delfile()
+  augroup TestAuCmd
+    au!
+    autocmd BufReadPre Xfile call delete('Xfile')
+  augroup END
+  call writefile([], 'Xfile')
+  call assert_fails('new Xfile', 'E200:')
+  call assert_equal('Xfile', @%)
+  call assert_equal(1, &readonly)
+  call delete('Xfile')
+  augroup TestAuCmd
+    au!
+  augroup END
+  close!
+endfunc
+
+" Test for BufReadPre autocmd changing the current buffer
+func Test_BufReadPre_changebuf()
+  augroup TestAuCmd
+    au!
+    autocmd BufReadPre Xfile edit Xsomeotherfile
+  augroup END
+  call writefile([], 'Xfile')
+  call assert_fails('new Xfile', 'E201:')
+  call assert_equal('Xsomeotherfile', @%)
+  call assert_equal(1, &readonly)
+  call delete('Xfile')
+  augroup TestAuCmd
+    au!
+  augroup END
+  close!
+endfunc
+
+" Test for BufWipeouti autocmd changing the current buffer when reading a file
+" in an empty buffer with 'f' flag in 'cpo'
+func Test_BufDelete_changebuf()
+  new
+  augroup TestAuCmd
+    au!
+    autocmd BufWipeout * let bufnr = bufadd('somefile') | exe "b " .. bufnr
+  augroup END
+  let save_cpo = &cpo
+  set cpo+=f
+  call assert_fails('r Xfile', ['E812:', 'E484:'])
+  call assert_equal('somefile', @%)
+  let &cpo = save_cpo
+  augroup TestAuCmd
+    au!
+  augroup END
+  close!
+endfunc
+
+" Test for the temporary internal window used to execute autocmds
+func Test_autocmd_window()
+  %bw!
+  edit one.txt
+  tabnew two.txt
+  let g:blist = []
+  augroup aucmd_win_test1
+    au!
+    au BufEnter * call add(g:blist, [expand('<afile>'),
+          \ win_gettype(bufwinnr(expand('<afile>')))])
+  augroup END
+
+  doautoall BufEnter
+  call assert_equal([['one.txt', 'autocmd'], ['two.txt', '']], g:blist)
+
+  augroup aucmd_win_test1
+    au!
+  augroup END
+  augroup! aucmd_win_test1
+  %bw!
+endfunc
+
+" Test for trying to close the temporary window used for executing an autocmd
+func Test_close_autocmd_window()
+  %bw!
+  edit one.txt
+  tabnew two.txt
+  augroup aucmd_win_test2
+    au!
+    au BufEnter * if expand('<afile>') == 'one.txt' | 1close | endif
+  augroup END
+
+  call assert_fails('doautoall BufEnter', 'E813:')
+
+  augroup aucmd_win_test2
+    au!
+  augroup END
+  augroup! aucmd_win_test2
+  %bwipe!
+endfunc
+
+" Test for trying to close the tab that has the temporary window for exeucing
+" an autocmd.
+func Test_close_autocmd_tab()
+  edit one.txt
+  tabnew two.txt
+   augroup aucmd_win_test
+    au!
+    au BufEnter * if expand('<afile>') == 'one.txt' | tabfirst | tabonly | endif
+  augroup END
+
+  call assert_fails('doautoall BufEnter', 'E813:')
+
+  tabonly
+  augroup aucmd_win_test
+    au!
+  augroup END
+  augroup! aucmd_win_test
+  %bwipe!
+endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

@@ -1,7 +1,7 @@
 " These commands create the option window.
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2019 May 25
+" Last Change:	2020 Jun 10
 
 " If there already is an option window, jump to that one.
 let buf = bufnr('option-window')
@@ -429,6 +429,9 @@ if has("syntax")
   call append("$", "cursorline\thighlight the screen line of the cursor")
   call append("$", "\t(local to window)")
   call <SID>BinOptionL("cul")
+  call append("$", "cursorlineopt\tspecifies which area 'cursorline' highlights")
+  call append("$", "\t(local to window)")
+  call <SID>OptionL("culopt")
   call append("$", "colorcolumn\tcolumns to highlight")
   call append("$", "\t(local to window)")
   call <SID>OptionL("cc")
@@ -444,6 +447,9 @@ if has("syntax")
   call append("$", "spellcapcheck\tpattern to locate the end of a sentence")
   call append("$", "\t(local to buffer)")
   call <SID>OptionL("spc")
+  call append("$", "spelloptions\tflags to change how spell checking works")
+  call append("$", "\t(local to buffer)")
+  call <SID>OptionL("spo")
   call append("$", "spellsuggest\tmethods used to suggest corrections")
   call <SID>OptionG("sps", &sps)
   call append("$", "mkspellmem\tamount of memory used by :mkspell before compressing")
@@ -479,6 +485,8 @@ call append("$", " \tset wmw=" . &wmw)
 call append("$", "helpheight\tinitial height of the help window")
 call append("$", " \tset hh=" . &hh)
 if has("quickfix")
+  call append("$", "previewpopup\tuse a popup window for preview")
+  call append("$", " \tset pvp=" . &pvp)
   call append("$", "previewheight\tdefault height for the preview window")
   call append("$", " \tset pvh=" . &pvh)
   call append("$", "previewwindow\tidentifies the preview window")
@@ -589,6 +597,10 @@ call <SID>OptionG("mouse", &mouse)
 if has("gui")
   call append("$", "mousefocus\tthe window with the mouse pointer becomes the current one")
   call <SID>BinOptionG("mousef", &mousef)
+endif
+call append("$", "scrollfocus\tthe window with the mouse pointer scrolls with the mouse wheel")
+call <SID>BinOptionG("scf", &scf)
+if has("gui")
   call append("$", "mousehide\thide the mouse pointer while typing")
   call <SID>BinOptionG("mh", &mh)
 endif
@@ -804,6 +816,10 @@ if has("insert_expand")
   call <SID>OptionL("cpt")
   call append("$", "completeopt\twhether to use a popup menu for Insert mode completion")
   call <SID>OptionG("cot", &cot)
+  if exists("+completepopup")
+    call append("$", "completepopup\toptions for the Insert mode completion info popup")
+    call <SID>OptionG("cpp", &cpp)
+  endif
   call append("$", "pumheight\tmaximum height of the popup menu")
   call <SID>OptionG("ph", &ph)
   call append("$", "pumwidth\tminimum width of the popup menu")
@@ -1140,7 +1156,7 @@ call <SID>BinOptionG("warn", &warn)
 
 
 if has("quickfix")
-  call <SID>Header("running make and jumping to errors")
+  call <SID>Header("running make and jumping to errors (quickfix)")
   call append("$", "errorfile\tname of the file that contains error messages")
   call <SID>OptionG("ef", &ef)
   call append("$", "errorformat\tlist of formats for error messages")
@@ -1161,6 +1177,8 @@ if has("quickfix")
   call append("$", "makeencoding\tencoding of the \":make\" and \":grep\" output")
   call append("$", "\t(global or local to buffer)")
   call <SID>OptionG("menc", &menc)
+  call append("$", "quickfixtextfunc\tfunction to display text in the quickfix window")
+  call <SID>OptionG("qftf", &qftf)
 endif
 
 
@@ -1174,6 +1192,8 @@ if has("win32") || has("osfiletype")
   if has("win32")
     call append("$", "shellslash\tuse forward slashes in file names; for Unix-like shells")
     call <SID>BinOptionG("ssl", &ssl)
+    call append("$", "completeslash\tspecifies slash/backslash used for completion")
+    call <SID>OptionG("csl", &csl)
   endif
 endif
 

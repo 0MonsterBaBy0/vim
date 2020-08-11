@@ -1,4 +1,4 @@
-*intro.txt*     For Vim version 8.1.  Last change: 2019 May 07
+*intro.txt*     For Vim version 8.2.  Last change: 2020 May 30
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -65,14 +65,21 @@ contain links to the most recent version of Vim.  The FAQ is a list of
 Frequently Asked Questions.  Read this if you have problems.
 
 	Vim home page:	  https://www.vim.org/
-	Vim FAQ:	  https://vimhelp.appspot.com/vim_faq.txt.html
+	Vim FAQ:	  https://vimhelp.org/vim_faq.txt.html
 	Downloading:	  https://www.vim.org/download.php
+
+
+Asking questions, finding answers: https://vi.stackexchange.com/
+"Vi and Vim Stack Exchange is a question and answer site for people using the
+vi and Vim families of text editors"
 
 
 Usenet News group where Vim is discussed:		*news* *usenet*
 	comp.editors
 This group is also for other editors.  If you write about Vim, don't forget to
 mention that.
+You can access it here:
+https://groups.google.com/forum/#!topic/comp.editors
 
 						*mail-list* *maillist*
 There are several mailing lists for Vim:
@@ -114,14 +121,16 @@ http://www.vim.org/maillist.php
 
 Bug reports:				*bugs* *bug-reports* *bugreport.vim*
 
-There are two ways to report bugs, both work:
-1. Send bug reports to: Vim Developers <vim-dev@vim.org>
+There are three ways to report bugs:
+1. Open an issue on GitHub: https://github.com/vim/vim/issues
+   The text will be forwarded to the vim-dev maillist.
+2. For issues with runtime files, look in the header for an email address or
+   any other way to report it to the maintainer.
+3. Send bug reports to: Vim Developers <vim-dev@vim.org>
    This is a maillist, you need to become a member first and many people will
    see the message.  If you don't want that, e.g. because it is a security
    issue, send it to <bugs@vim.org>, this only goes to the Vim maintainer
    (that's Bram).
-2. Open an issue on GitHub: https://github.com/vim/vim/issues
-   The text will be forwarded to the vim-dev maillist.
 
 Please be brief; all the time that is spent on answering mail is subtracted
 from the time that is spent on improving Vim!  Always give a reproducible
@@ -227,7 +236,7 @@ Vim would never have become what it is now, without the help of these people!
 	Sung-Hyun Nam		Work on multi-byte versions
 	Vince Negri		Win32 GUI and generic console enhancements
 	Steve Oualline		Author of the first Vim book |frombook|
-	Dominique Pelle		valgrind reports and many fixes
+	Dominique Pelle		Valgrind reports and many fixes
 	A.Politz		Many bug reports and some fixes
 	George V. Reilly	Win32 port, Win32 GUI start-off
 	Stephen Riehm		bug collector
@@ -501,6 +510,9 @@ the ":map" command.  The rules are:
 	   <M-a>		Meta- a  ('a' with bit 8 set)
 	   <M-A>		Meta- A  ('A' with bit 8 set)
 	   <t_kd>		"kd" termcap entry (cursor down key)
+    Although you can specify <M-{char}> with {char} being a multi-byte
+    character, Vim may not be able to know what byte sequence that is and then
+    it won't work.
 
 If you want to use the full <> notation in Vim, you have to make sure the '<'
 flag is excluded from 'cpoptions' (when 'compatible' is not set, it already is

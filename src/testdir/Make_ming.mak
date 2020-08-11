@@ -28,24 +28,17 @@ default: vimall
 
 include Make_all.mak
 
-# Omitted:
-# test2		"\\tmp" doesn't work.
-# test10	'errorformat' is different
-# test97	\{ and \$ are not escaped characters
-
-SCRIPTS = $(SCRIPTS_ALL) $(SCRIPTS_MORE1) $(SCRIPTS_MORE4) $(SCRIPTS_WIN32)
-
-SCRIPTS_BENCH = bench_re_freeze.out
+SCRIPTS_BENCH = test_bench_regexp.res
 
 # Must run test1 first to create small.vim.
-$(SCRIPTS) $(SCRIPTS_GUI) $(SCRIPTS_WIN32) $(NEW_TESTS_RES): $(SCRIPTS_FIRST)
+$(NEW_TESTS_RES): $(SCRIPTS_FIRST)
 
 .SUFFIXES: .in .out .res .vim
 
-vimall:	fixff $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_GUI) $(SCRIPTS_WIN32) newtests
+vimall:	fixff $(SCRIPTS_FIRST) newtests
 	@echo ALL DONE
 
-nongui:	fixff nolog $(SCRIPTS_FIRST) $(SCRIPTS) newtests
+nongui:	fixff nolog $(SCRIPTS_FIRST) newtests
 	@echo ALL DONE
 
 benchmark: $(SCRIPTS_BENCH)
@@ -53,10 +46,10 @@ benchmark: $(SCRIPTS_BENCH)
 small: nolog
 	@echo ALL DONE
 
-gui:	fixff nolog $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_GUI) newtests
+gui:	fixff nolog $(SCRIPTS_FIRST) newtests
 	@echo ALL DONE
 
-win32:	fixff nolog $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_WIN32) newtests
+win32:	fixff nolog $(SCRIPTS_FIRST) newtests
 	@echo ALL DONE
 
 # TODO: find a way to avoid changing the distributed files.
@@ -93,26 +86,15 @@ test1.out: test1.in
 	-@if exist test.out $(DEL) test.out
 	-@if exist viminfo  $(DEL) viminfo
 
-.in.out:
-	-@if exist $*.ok $(CP) $*.ok test.ok
-	$(VIMPROG) -u dos.vim $(NO_INITS) -s dotest.in $*.in
-	@diff test.out $*.ok
-	-@if exist $*.out $(DEL) $*.out
-	@$(MV) test.out $*.out
-	-@if exist Xdir1 $(DELDIR) Xdir1
-	-@if exist Xfind $(DELDIR) Xfind
-	-@if exist XfakeHOME $(DELDIR) XfakeHOME
-	-@if exist X* $(DEL) X*
-	-@if exist test.ok $(DEL) test.ok
-	-@if exist viminfo $(DEL) viminfo
-
 nolog:
 	-@if exist test.log $(DEL) test.log
 	-@if exist messages $(DEL) messages
 
-bench_re_freeze.out: bench_re_freeze.vim
+test_bench_regexp.res: test_bench_regexp.vim
 	-$(DEL) benchmark.out
-	$(VIMPROG) -u dos.vim $(NO_INITS) $*.in
+	@echo $(VIMPROG) > vimcmd
+	$(VIMPROG) -u NONE $(NO_INITS) -S runtest.vim $*.vim
+	@$(DEL) vimcmd
 	$(CAT) benchmark.out
 
 # New style of tests uses Vim script with assert calls.  These are easier
@@ -138,5 +120,5 @@ test_gui_init.res: test_gui_init.vim
 
 test_options.res test_alot.res: opt_test.vim
 
-opt_test.vim: ../option.c gen_opt_test.vim
-	$(VIMPROG) -u NONE -S gen_opt_test.vim --noplugin --not-a-term ../option.c
+opt_test.vim: ../optiondefs.h gen_opt_test.vim
+	$(VIMPROG) -u NONE -S gen_opt_test.vim --noplugin --not-a-term ../optiondefs.h

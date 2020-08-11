@@ -10,7 +10,7 @@
 #include "vim.h"
 
 #ifdef AMIGA
-# include <time.h>	/* for time() */
+# include <time.h>	// for time()
 #endif
 
 /*
@@ -44,9 +44,13 @@ init_longVersion(void)
      * VAX C can't concatenate strings in the preprocessor.
      */
     strcpy(longVersion, VIM_VERSION_LONG_DATE);
+#ifdef BUILD_DATE
+    strcat(longVersion, BUILD_DATE);
+#else
     strcat(longVersion, __DATE__);
     strcat(longVersion, " ");
     strcat(longVersion, __TIME__);
+#endif
     strcat(longVersion, ")");
 }
 
@@ -54,19 +58,26 @@ init_longVersion(void)
     void
 init_longVersion(void)
 {
-    char *date_time = __DATE__ " " __TIME__;
-    char *msg = _("%s (%s, compiled %s)");
-    size_t len = strlen(msg)
-		+ strlen(VIM_VERSION_LONG_ONLY)
-		+ strlen(VIM_VERSION_DATE_ONLY)
-		+ strlen(date_time);
-
-    longVersion = alloc(len);
     if (longVersion == NULL)
-	longVersion = VIM_VERSION_LONG;
-    else
-	vim_snprintf(longVersion, len, msg,
-		      VIM_VERSION_LONG_ONLY, VIM_VERSION_DATE_ONLY, date_time);
+    {
+#ifdef BUILD_DATE
+	char *date_time = BUILD_DATE;
+#else
+	char *date_time = __DATE__ " " __TIME__;
+#endif
+	char *msg = _("%s (%s, compiled %s)");
+	size_t len = strlen(msg)
+		    + strlen(VIM_VERSION_LONG_ONLY)
+		    + strlen(VIM_VERSION_DATE_ONLY)
+		    + strlen(date_time);
+
+	longVersion = alloc(len);
+	if (longVersion == NULL)
+	    longVersion = VIM_VERSION_LONG;
+	else
+	    vim_snprintf(longVersion, len, msg,
+			  VIM_VERSION_LONG_ONLY, VIM_VERSION_DATE_ONLY, date_time);
+    }
 }
 # endif
 #else
@@ -86,7 +97,7 @@ static char *(features[]) =
 #else
 	"-acl",
 #endif
-#ifdef AMIGA		/* only for Amiga systems */
+#ifdef AMIGA		// only for Amiga systems
 # ifdef FEAT_ARP
 	"+ARP",
 # else
@@ -158,26 +169,14 @@ static char *(features[]) =
 #else
 	"-clipboard",
 #endif
-#ifdef FEAT_CMDL_COMPL
 	"+cmdline_compl",
-#else
-	"-cmdline_compl",
-#endif
-#ifdef FEAT_CMDHIST
 	"+cmdline_hist",
-#else
-	"-cmdline_hist",
-#endif
 #ifdef FEAT_CMDL_INFO
 	"+cmdline_info",
 #else
 	"-cmdline_info",
 #endif
-#ifdef FEAT_COMMENTS
 	"+comments",
-#else
-	"-comments",
-#endif
 #ifdef FEAT_CONCEAL
 	"+conceal",
 #else
@@ -281,7 +280,7 @@ static char *(features[]) =
 #else
 	"-footer",
 #endif
-	    /* only interesting on Unix systems */
+	    // only interesting on Unix systems
 #if !defined(USE_SYSTEM) && defined(UNIX)
 	"+fork()",
 #endif
@@ -294,11 +293,7 @@ static char *(features[]) =
 #else
 	"-gettext",
 #endif
-#ifdef FEAT_HANGULIN
-	"+hangul_input",
-#else
 	"-hangul_input",
-#endif
 #if (defined(HAVE_ICONV_H) && defined(USE_ICONV)) || defined(DYNAMIC_ICONV)
 # ifdef DYNAMIC_ICONV
 	"+iconv/dyn",
@@ -308,10 +303,11 @@ static char *(features[]) =
 #else
 	"-iconv",
 #endif
-#ifdef FEAT_INS_EXPAND
 	"+insert_expand",
+#ifdef FEAT_IPV6
+	"+ipv6",
 #else
-	"-insert_expand",
+	"-ipv6",
 #endif
 #ifdef FEAT_JOB_CHANNEL
 	"+job",
@@ -354,11 +350,7 @@ static char *(features[]) =
 	"-lispindent",
 #endif
 	"+listcmds",
-#ifdef FEAT_LOCALMAP
 	"+localmap",
-#else
-	"-localmap",
-#endif
 #ifdef FEAT_LUA
 # ifdef DYNAMIC_LUA
 	"+lua/dyn",
@@ -378,20 +370,12 @@ static char *(features[]) =
 #else
 	"-mksession",
 #endif
-#ifdef FEAT_MODIFY_FNAME
 	"+modify_fname",
-#else
-	"-modify_fname",
-#endif
-#ifdef FEAT_MOUSE
 	"+mouse",
-#  ifdef FEAT_MOUSESHAPE
+#ifdef FEAT_MOUSESHAPE
 	"+mouseshape",
-#  else
+#else
 	"-mouseshape",
-#  endif
-# else
-	"-mouse",
 #endif
 
 #if defined(UNIX) || defined(VMS)
@@ -426,11 +410,7 @@ static char *(features[]) =
 #endif
 
 #if defined(UNIX) || defined(VMS)
-# ifdef FEAT_MOUSE_XTERM
 	"+mouse_sgr",
-# else
-	"-mouse_sgr",
-# endif
 # ifdef FEAT_SYSMOUSE
 	"+mouse_sysmouse",
 # else
@@ -441,11 +421,7 @@ static char *(features[]) =
 # else
 	"-mouse_urxvt",
 # endif
-# ifdef FEAT_MOUSE_XTERM
 	"+mouse_xterm",
-# else
-	"-mouse_xterm",
-# endif
 #endif
 
 #ifdef FEAT_MBYTE_IME
@@ -476,11 +452,7 @@ static char *(features[]) =
 #else
 	"-netbeans_intg",
 #endif
-#ifdef FEAT_NUM64
 	"+num64",
-#else
-	"-num64",
-#endif
 #ifdef FEAT_GUI_MSWIN
 # ifdef FEAT_OLE
 	"+ole",
@@ -511,6 +483,11 @@ static char *(features[]) =
 	"+persistent_undo",
 #else
 	"-persistent_undo",
+#endif
+#ifdef FEAT_PROP_POPUP
+	"+popupwin",
+#else
+	"-popupwin",
 #endif
 #ifdef FEAT_PRINTER
 # ifdef FEAT_POSTSCRIPT
@@ -606,7 +583,7 @@ static char *(features[]) =
 #else
 	"-syntax",
 #endif
-	    /* only interesting on Unix systems */
+	    // only interesting on Unix systems
 #if defined(USE_SYSTEM) && defined(UNIX)
 	"+system()",
 #endif
@@ -637,7 +614,7 @@ static char *(features[]) =
 	"-terminal",
 #endif
 #if defined(UNIX)
-/* only Unix can have terminfo instead of termcap */
+// only Unix can have terminfo instead of termcap
 # ifdef TERMINFO
 	"+terminfo",
 # else
@@ -654,13 +631,13 @@ static char *(features[]) =
 #else
 	"-textobjects",
 #endif
-#ifdef FEAT_TEXT_PROP
+#ifdef FEAT_PROP_POPUP
 	"+textprop",
 #else
 	"-textprop",
 #endif
 #if !defined(UNIX)
-/* unix always includes termcap support */
+// unix always includes termcap support
 # ifdef HAVE_TGETENT
 	"+tgetent",
 # else
@@ -777,294 +754,6 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
-/**/
-    1568,
-/**/
-    1567,
-/**/
-    1566,
-/**/
-    1565,
-/**/
-    1564,
-/**/
-    1563,
-/**/
-    1562,
-/**/
-    1561,
-/**/
-    1560,
-/**/
-    1559,
-/**/
-    1558,
-/**/
-    1557,
-/**/
-    1556,
-/**/
-    1555,
-/**/
-    1554,
-/**/
-    1553,
-/**/
-    1552,
-/**/
-    1551,
-/**/
-    1550,
-/**/
-    1549,
-/**/
-    1548,
-/**/
-    1547,
-/**/
-    1546,
-/**/
-    1545,
-/**/
-    1544,
-/**/
-    1543,
-/**/
-    1542,
-/**/
-    1541,
-/**/
-    1540,
-/**/
-    1539,
-/**/
-    1538,
-/**/
-    1537,
-/**/
-    1536,
-/**/
-    1535,
-/**/
-    1534,
-/**/
-    1533,
-/**/
-    1532,
-/**/
-    1531,
-/**/
-    1530,
-/**/
-    1529,
-/**/
-    1528,
-/**/
-    1527,
-/**/
-    1526,
-/**/
-    1525,
-/**/
-    1524,
-/**/
-    1523,
-/**/
-    1522,
-/**/
-    1521,
-/**/
-    1520,
-/**/
-    1519,
-/**/
-    1518,
-/**/
-    1517,
-/**/
-    1516,
-/**/
-    1515,
-/**/
-    1514,
-/**/
-    1513,
-/**/
-    1512,
-/**/
-    1511,
-/**/
-    1510,
-/**/
-    1509,
-/**/
-    1508,
-/**/
-    1507,
-/**/
-    1506,
-/**/
-    1505,
-/**/
-    1504,
-/**/
-    1503,
-/**/
-    1502,
-/**/
-    1501,
-/**/
-    1500,
-/**/
-    1499,
-/**/
-    1498,
-/**/
-    1497,
-/**/
-    1496,
-/**/
-    1495,
-/**/
-    1494,
-/**/
-    1493,
-/**/
-    1492,
-/**/
-    1491,
-/**/
-    1490,
-/**/
-    1489,
-/**/
-    1488,
-/**/
-    1487,
-/**/
-    1486,
-/**/
-    1485,
-/**/
-    1484,
-/**/
-    1483,
-/**/
-    1482,
-/**/
-    1481,
-/**/
-    1480,
-/**/
-    1479,
-/**/
-    1478,
-/**/
-    1477,
-/**/
-    1476,
-/**/
-    1475,
-/**/
-    1474,
-/**/
-    1473,
-/**/
-    1472,
-/**/
-    1471,
-/**/
-    1470,
-/**/
-    1469,
-/**/
-    1468,
-/**/
-    1467,
-/**/
-    1466,
-/**/
-    1465,
-/**/
-    1464,
-/**/
-    1463,
-/**/
-    1462,
-/**/
-    1461,
-/**/
-    1460,
-/**/
-    1459,
-/**/
-    1458,
-/**/
-    1457,
-/**/
-    1456,
-/**/
-    1455,
-/**/
-    1454,
-/**/
-    1453,
-/**/
-    1452,
-/**/
-    1451,
-/**/
-    1450,
-/**/
-    1449,
-/**/
-    1448,
-/**/
-    1447,
-/**/
-    1446,
-/**/
-    1445,
-/**/
-    1444,
-/**/
-    1443,
-/**/
-    1442,
-/**/
-    1441,
-/**/
-    1440,
-/**/
-    1439,
-/**/
-    1438,
-/**/
-    1437,
-/**/
-    1436,
-/**/
-    1435,
-/**/
-    1434,
-/**/
-    1433,
-/**/
-    1432,
-/**/
-    1431,
-/**/
-    1430,
-/**/
-    1429,
-/**/
-    1428,
-/**/
-    1427,
-/**/
-    1426,
-/**/
-    1425,
 /**/
     1424,
 /**/
@@ -4015,14 +3704,15 @@ list_in_columns(char_u **items, int size, int current)
     int		i;
     int		ncol;
     int		nrow;
+    int		cur_row = 1;
     int		item_count = 0;
     int		width = 0;
 #ifdef FEAT_SYN_HL
     int		use_highlight = (items == (char_u **)features);
 #endif
 
-    /* Find the length of the longest item, use that + 1 as the column
-     * width. */
+    // Find the length of the longest item, use that + 1 as the column
+    // width.
     for (i = 0; size < 0 ? items[i] != NULL : i < size; ++i)
     {
 	int l = (int)vim_strsize(items[i]) + (i == current ? 2 : 0);
@@ -4035,22 +3725,22 @@ list_in_columns(char_u **items, int size, int current)
 
     if (Columns < width)
     {
-	/* Not enough screen columns - show one per line */
+	// Not enough screen columns - show one per line
 	for (i = 0; i < item_count; ++i)
 	{
 	    version_msg_wrap(items[i], i == current);
-	    if (msg_col > 0)
+	    if (msg_col > 0 && i < item_count - 1)
 		msg_putchar('\n');
 	}
 	return;
     }
 
-    /* The rightmost column doesn't need a separator.
-     * Sacrifice it to fit in one more column if possible. */
+    // The rightmost column doesn't need a separator.
+    // Sacrifice it to fit in one more column if possible.
     ncol = (int) (Columns + 1) / width;
     nrow = item_count / ncol + (item_count % ncol ? 1 : 0);
 
-    /* i counts columns then rows.  idx counts rows then columns. */
+    // "i" counts columns then rows.  "idx" counts rows then columns.
     for (i = 0; !got_int && i < nrow * ncol; ++i)
     {
 	int idx = (i / ncol) + (i % ncol) * nrow;
@@ -4071,8 +3761,9 @@ list_in_columns(char_u **items, int size, int current)
 		msg_putchar(']');
 	    if (last_col)
 	    {
-		if (msg_col > 0)
+		if (msg_col > 0 && cur_row < nrow)
 		    msg_putchar('\n');
+		++cur_row;
 	    }
 	    else
 	    {
@@ -4082,8 +3773,13 @@ list_in_columns(char_u **items, int size, int current)
 	}
 	else
 	{
+	    // this row is out of items, thus at the end of the row
 	    if (msg_col > 0)
-		msg_putchar('\n');
+	    {
+		if (cur_row < nrow)
+		    msg_putchar('\n');
+		++cur_row;
+	    }
 	}
     }
 }
@@ -4147,13 +3843,13 @@ list_version(void)
 
 #endif
 
-    /* Print the list of patch numbers if there is at least one. */
-    /* Print a range when patches are consecutive: "1-10, 12, 15-40, 42-45" */
+    // Print the list of patch numbers if there is at least one.
+    // Print a range when patches are consecutive: "1-10, 12, 15-40, 42-45"
     if (included_patches[0] != 0)
     {
 	msg_puts(_("\nIncluded patches: "));
 	first = -1;
-	/* find last one */
+	// find last one
 	for (i = 0; included_patches[i] != 0; ++i)
 	    ;
 	while (--i >= 0)
@@ -4175,7 +3871,7 @@ list_version(void)
 	}
     }
 
-    /* Print the list of extra patch descriptions if there is at least one. */
+    // Print the list of extra patch descriptions if there is at least one.
     if (extra_patches[0] != NULL)
     {
 	msg_puts(_("\nExtra patches: "));
@@ -4252,21 +3948,16 @@ list_version(void)
     msg_puts(_("with X11-Athena GUI."));
 #    endif
 #   else
+#    ifdef FEAT_GUI_HAIKU
+    msg_puts(_("with Haiku GUI."));
+#    else
 #     ifdef FEAT_GUI_PHOTON
     msg_puts(_("with Photon GUI."));
 #     else
 #      if defined(MSWIN)
     msg_puts(_("with GUI."));
-#      else
-#	if defined(TARGET_API_MAC_CARBON) && TARGET_API_MAC_CARBON
-    msg_puts(_("with Carbon GUI."));
-#	else
-#	 if defined(TARGET_API_MAC_OSX) && TARGET_API_MAC_OSX
-    msg_puts(_("with Cocoa GUI."));
-#	 else
-#	 endif
-#	endif
 #      endif
+#     endif
 #    endif
 #   endif
 #  endif
@@ -4275,6 +3966,8 @@ list_version(void)
     version_msg(_("  Features included (+) or not (-):\n"));
 
     list_features();
+    if (msg_col > 0)
+	msg_putchar('\n');
 
 #ifdef SYS_VIMRC_FILE
     version_msg(_("   system vimrc file: \""));
@@ -4370,6 +4063,7 @@ list_version(void)
 }
 
 static void do_intro_line(int row, char_u *mesg, int add_version, int attr);
+static void intro_message(int colon);
 
 /*
  * Show the intro message when not editing a file.
@@ -4389,9 +4083,9 @@ maybe_intro_message(void)
  * Only used when starting Vim on an empty file, without a file name.
  * Or with the ":intro" command (for Sven :-).
  */
-    void
+    static void
 intro_message(
-    int		colon)		/* TRUE for ":intro" */
+    int		colon)		// TRUE for ":intro"
 {
     int		i;
     int		row;
@@ -4447,23 +4141,23 @@ intro_message(
     };
 #endif
 
-    /* blanklines = screen height - # message lines */
+    // blanklines = screen height - # message lines
     blanklines = (int)Rows - ((sizeof(lines) / sizeof(char *)) - 1);
     if (!p_cp)
-	blanklines += 4;  /* add 4 for not showing "Vi compatible" message */
+	blanklines += 4;  // add 4 for not showing "Vi compatible" message
 
-    /* Don't overwrite a statusline.  Depends on 'cmdheight'. */
+    // Don't overwrite a statusline.  Depends on 'cmdheight'.
     if (p_ls > 1)
 	blanklines -= Rows - topframe->fr_height;
     if (blanklines < 0)
 	blanklines = 0;
 
-    /* Show the sponsor and register message one out of four times, the Uganda
-     * message two out of four times. */
+    // Show the sponsor and register message one out of four times, the Uganda
+    // message two out of four times.
     sponsor = (int)time(NULL);
     sponsor = ((sponsor & 2) == 0) - ((sponsor & 4) == 0);
 
-    /* start displaying the message lines after half of the blank lines */
+    // start displaying the message lines after half of the blank lines
     row = blanklines / 2;
     if ((row >= 2 && Columns >= 50) || colon)
     {
@@ -4499,7 +4193,7 @@ intro_message(
 	}
     }
 
-    /* Make the wait-return message appear just below the text. */
+    // Make the wait-return message appear just below the text.
     if (colon)
 	msg_row = row;
 }
@@ -4529,14 +4223,14 @@ do_intro_line(
     }
 #endif
 
-    /* Center the message horizontally. */
+    // Center the message horizontally.
     col = vim_strsize(mesg);
     if (add_version)
     {
 	STRCPY(vers, mediumVersion);
 	if (highest_patch())
 	{
-	    /* Check for 9.9x or 9.9xx, alpha/beta version */
+	    // Check for 9.9x or 9.9xx, alpha/beta version
 	    if (isalpha((int)vers[3]))
 	    {
 		int len = (isalpha((int)vers[4])) ? 5 : 4;
@@ -4552,7 +4246,7 @@ do_intro_line(
     if (col < 0)
 	col = 0;
 
-    /* Split up in parts to highlight <> items differently. */
+    // Split up in parts to highlight <> items differently.
     for (p = mesg; *p != NUL; p += l)
     {
 	clen = 0;
@@ -4571,7 +4265,7 @@ do_intro_line(
 	col += clen;
     }
 
-    /* Add the version number to the version line. */
+    // Add the version number to the version line.
     if (add_version)
 	screen_puts(vers, row, col, 0);
 }

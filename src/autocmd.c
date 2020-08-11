@@ -114,6 +114,7 @@ static struct event_name
     {"ColorSchemePre",	EVENT_COLORSCHEMEPRE},
     {"CompleteChanged",	EVENT_COMPLETECHANGED},
     {"CompleteDone",	EVENT_COMPLETEDONE},
+    {"CompleteDonePre",	EVENT_COMPLETEDONEPRE},
     {"CursorHold",	EVENT_CURSORHOLD},
     {"CursorHoldI",	EVENT_CURSORHOLDI},
     {"CursorMoved",	EVENT_CURSORMOVED},
@@ -155,9 +156,12 @@ static struct event_name
     {"QuickFixCmdPre",	EVENT_QUICKFIXCMDPRE},
     {"QuitPre",		EVENT_QUITPRE},
     {"RemoteReply",	EVENT_REMOTEREPLY},
+    {"SafeState",	EVENT_SAFESTATE},
+    {"SafeStateAgain",	EVENT_SAFESTATEAGAIN},
     {"SessionLoadPost",	EVENT_SESSIONLOADPOST},
     {"ShellCmdPost",	EVENT_SHELLCMDPOST},
     {"ShellFilterPost",	EVENT_SHELLFILTERPOST},
+    {"SigUSR1",		EVENT_SIGUSR1},
     {"SourceCmd",	EVENT_SOURCECMD},
     {"SourcePre",	EVENT_SOURCEPRE},
     {"SourcePost",	EVENT_SOURCEPOST},
@@ -172,6 +176,7 @@ static struct event_name
     {"TabLeave",	EVENT_TABLEAVE},
     {"TermChanged",	EVENT_TERMCHANGED},
     {"TerminalOpen",	EVENT_TERMINALOPEN},
+    {"TerminalWinOpen", EVENT_TERMINALWINOPEN},
     {"TermResponse",	EVENT_TERMRESPONSE},
     {"TextChanged",	EVENT_TEXTCHANGED},
     {"TextChangedI",	EVENT_TEXTCHANGEDI},
@@ -215,7 +220,7 @@ static AutoPat *last_autopat[NUM_EVENTS] =
 /*
  * struct used to keep status while executing autocommands for an event.
  */
-typedef struct AutoPatCmd
+struct AutoPatCmd_S
 {
     AutoPat	*curpat;	// next AutoPat to examine
     AutoCmd	*nextcmd;	// next AutoCmd to execute
@@ -226,35 +231,29 @@ typedef struct AutoPatCmd
     event_T	event;		// current event
     int		arg_bufnr;	// Initially equal to <abuf>, set to zero when
 				// buf is deleted.
-    struct AutoPatCmd   *next;	// chain of active apc-s for auto-invalidation
-} AutoPatCmd;
+    AutoPatCmd   *next;		// chain of active apc-s for auto-invalidation
+};
 
-static AutoPatCmd *active_apc_list = NULL; /* stack of active autocommands */
+static AutoPatCmd *active_apc_list = NULL; // stack of active autocommands
+
+// Macro to loop over all the patterns for an autocmd event
+#define FOR_ALL_AUTOCMD_PATTERNS(event, ap) \
+    for ((ap) = first_autopat[(int)(event)]; (ap) != NULL; (ap) = (ap)->next)
 
 /*
  * augroups stores a list of autocmd group names.
  */
 static garray_T augroups = {0, 0, sizeof(char_u *), 10, NULL};
 #define AUGROUP_NAME(i) (((char_u **)augroups.ga_data)[i])
-/* use get_deleted_augroup() to get this */
+// use get_deleted_augroup() to get this
 static char_u *deleted_augroup = NULL;
-
-/*
- * Set by the apply_autocmds_group function if the given event is equal to
- * EVENT_FILETYPE. Used by the readfile function in order to determine if
- * EVENT_BUFREADPOST triggered the EVENT_FILETYPE.
- *
- * Relying on this value requires one to reset it prior calling
- * apply_autocmds_group.
- */
-int au_did_filetype INIT(= FALSE);
 
 /*
  * The ID of the current group.  Group 0 is the default one.
  */
 static int current_augroup = AUGROUP_DEFAULT;
 
-static int au_need_clean = FALSE;   /* need to delete marked patterns */
+static int au_need_clean = FALSE;   // need to delete marked patterns
 
 static char_u *event_nr2name(event_T event);
 static int au_get_grouparg(char_u **argp);
@@ -265,7 +264,7 @@ static int au_find_group(char_u *name);
 
 static event_T	last_event;
 static int	last_group;
-static int	autocmd_blocked = 0;	/* block all autocmds */
+static int	autocmd_blocked = 0;	// block all autocmds
 
     static char_u *
 get_deleted_augroup(void)
@@ -462,7 +461,7 @@ aubuflocal_remove(buf_T *buf)
     for (event = (event_T)0; (int)event < (int)NUM_EVENTS;
 					    event = (event_T)((int)event + 1))
 	// loop over all autocommand patterns
-	for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
+	FOR_ALL_AUTOCMD_PATTERNS(event, ap)
 	    if (ap->buflocal_nr == buf->b_fnum)
 	    {
 		au_remove_pat(ap);
@@ -525,7 +524,7 @@ au_del_group(char_u *name)
 	for (event = (event_T)0; (int)event < (int)NUM_EVENTS;
 					    event = (event_T)((int)event + 1))
 	{
-	    for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
+	    FOR_ALL_AUTOCMD_PATTERNS(event, ap)
 		if (ap->group == i && ap->pat != NULL)
 		{
 		    give_warning((char_u *)_("W19: Deleting augroup that is still in use"), TRUE);
@@ -765,7 +764,7 @@ au_event_disable(char *what)
     save_ei = vim_strsave(p_ei);
     if (save_ei != NULL)
     {
-	new_ei = vim_strnsave(p_ei, (int)(STRLEN(p_ei) + STRLEN(what)));
+	new_ei = vim_strnsave(p_ei, STRLEN(p_ei) + STRLEN(what));
 	if (new_ei != NULL)
 	{
 	    if (*what == ',' && *p_ei == NUL)
@@ -790,7 +789,7 @@ au_event_restore(char_u *old_ei)
 	vim_free(old_ei);
     }
 }
-# endif  /* FEAT_SYN_HL */
+# endif  // FEAT_SYN_HL
 
 /*
  * do_autocmd() -- implements the :autocmd command.  Can be used in the
@@ -993,7 +992,7 @@ au_get_grouparg(char_u **argp)
 	;
     if (p > arg)
     {
-	group_name = vim_strnsave(arg, (int)(p - arg));
+	group_name = vim_strnsave(arg, p - arg);
 	if (group_name == NULL)		// out of memory
 	    return AUGROUP_ERROR;
 	group = au_find_group(group_name);
@@ -1034,7 +1033,7 @@ do_autocmd_event(
     int		patlen;
     int		is_buflocal;
     int		buflocal_nr;
-    char_u	buflocal_pat[25];	/* for "<buffer=X>" */
+    char_u	buflocal_pat[25];	// for "<buffer=X>"
 
     if (group == AUGROUP_ALL)
 	findgroup = current_augroup;
@@ -1047,7 +1046,7 @@ do_autocmd_event(
      */
     if (*pat == NUL)
     {
-	for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
+	FOR_ALL_AUTOCMD_PATTERNS(event, ap)
 	{
 	    if (forceit)  // delete the AutoPat, if it's in the current group
 	    {
@@ -1127,7 +1126,8 @@ do_autocmd_event(
 	{
 	    if (ap->pat != NULL)
 	    {
-		/* Accept a pattern when:
+		/*
+		 * Accept a pattern when:
 		 * - a group was specified and it's that group, or a group was
 		 *   not specified and it's the current group, or a group was
 		 *   not specified and we are listing
@@ -1184,7 +1184,7 @@ do_autocmd_event(
 	     */
 	    if (ap == NULL)
 	    {
-		/* refuse to add buffer-local ap if buffer number is invalid */
+		// refuse to add buffer-local ap if buffer number is invalid
 		if (is_buflocal && (buflocal_nr == 0
 				      || buflist_findnr(buflocal_nr) == NULL))
 		{
@@ -1248,7 +1248,7 @@ do_autocmd_event(
 	    ac->cmd = vim_strsave(cmd);
 #ifdef FEAT_EVAL
 	    ac->script_ctx = current_sctx;
-	    ac->script_ctx.sc_lnum += sourcing_lnum;
+	    ac->script_ctx.sc_lnum += SOURCING_LNUM;
 #endif
 	    if (ac->cmd == NULL)
 	    {
@@ -1591,8 +1591,8 @@ win_found:
 	    curbuf = curwin->w_buffer;
 	    if (win_valid(aco->save_prevwin))
 		prevwin = aco->save_prevwin;
-	    // In case the autocommand move the cursor to a position that that
-	    // not exist in curbuf.
+	    // In case the autocommand moves the cursor to a position that
+	    // does not exist in curbuf.
 	    check_cursor();
 	}
     }
@@ -1669,7 +1669,7 @@ apply_autocmds_retval(
 /*
  * Return TRUE when there is a CursorHold autocommand defined.
  */
-    int
+    static int
 has_cursorhold(void)
 {
     return (first_autopat[(int)(get_real_state() == NORMAL_BUSY
@@ -1688,10 +1688,7 @@ trigger_cursorhold(void)
 	    && has_cursorhold()
 	    && reg_recording == 0
 	    && typebuf.tb_len == 0
-#ifdef FEAT_INS_EXPAND
-	    && !ins_compl_active()
-#endif
-	    )
+	    && !ins_compl_active())
     {
 	state = get_real_state();
 	if (state == NORMAL_BUSY || (state & INSERT) != 0)
@@ -1736,7 +1733,6 @@ has_textchangedI(void)
     return (first_autopat[(int)EVENT_TEXTCHANGEDI] != NULL);
 }
 
-#if defined(FEAT_INS_EXPAND) || defined(PROTO)
 /*
  * Return TRUE when there is a TextChangedP autocommand defined.
  */
@@ -1745,7 +1741,6 @@ has_textchangedP(void)
 {
     return (first_autopat[(int)EVENT_TEXTCHANGEDP] != NULL);
 }
-#endif
 
 /*
  * Return TRUE when there is an InsertCharPre autocommand defined.
@@ -1763,15 +1758,6 @@ has_insertcharpre(void)
 has_cmdundefined(void)
 {
     return (first_autopat[(int)EVENT_CMDUNDEFINED] != NULL);
-}
-
-/*
- * Return TRUE when there is an FuncUndefined autocommand defined.
- */
-    int
-has_funcundefined(void)
-{
-    return (first_autopat[(int)EVENT_FUNCUNDEFINED] != NULL);
 }
 
 #if defined(FEAT_EVAL) || defined(PROTO)
@@ -1816,8 +1802,6 @@ apply_autocmds_group(
     int		save_changed;
     buf_T	*old_curbuf;
     int		retval = FALSE;
-    char_u	*save_sourcing_name;
-    linenr_T	save_sourcing_lnum;
     char_u	*save_autocmd_fname;
     int		save_autocmd_fname_full;
     int		save_autocmd_bufnr;
@@ -1840,6 +1824,7 @@ apply_autocmds_group(
     int		did_save_redobuff = FALSE;
     save_redo_T	save_redo;
     int		save_KeyTyped = KeyTyped;
+    ESTACK_CHECK_DECLARATION
 
     /*
      * Quickly return if there are no autocommands for this event or
@@ -2031,10 +2016,10 @@ apply_autocmds_group(
 
     // Don't redraw while doing autocommands.
     ++RedrawingDisabled;
-    save_sourcing_name = sourcing_name;
-    sourcing_name = NULL;	// don't free this one
-    save_sourcing_lnum = sourcing_lnum;
-    sourcing_lnum = 0;		// no line number here
+
+    // name and lnum are filled in later
+    estack_push(ETYPE_AUCMD, NULL, 0);
+    ESTACK_CHECK_SETUP
 
 #ifdef FEAT_EVAL
     save_current_sctx = current_sctx;
@@ -2054,9 +2039,7 @@ apply_autocmds_group(
     if (!autocmd_busy)
     {
 	save_search_patterns();
-#ifdef FEAT_INS_EXPAND
 	if (!ins_compl_active())
-#endif
 	{
 	    saveRedobuff(&save_redo);
 	    did_save_redobuff = TRUE;
@@ -2139,9 +2122,9 @@ apply_autocmds_group(
     autocmd_busy = save_autocmd_busy;
     filechangeshell_busy = FALSE;
     autocmd_nested = save_autocmd_nested;
-    vim_free(sourcing_name);
-    sourcing_name = save_sourcing_name;
-    sourcing_lnum = save_sourcing_lnum;
+    vim_free(SOURCING_NAME);
+    ESTACK_CHECK_NOW
+    estack_pop();
     vim_free(autocmd_fname);
     autocmd_fname = save_autocmd_fname;
     autocmd_fname_full = save_autocmd_fname_full;
@@ -2251,14 +2234,11 @@ unblock_autocmds(void)
 # endif
 }
 
-#if defined(FEAT_EVAL) && (defined(FEAT_XIM) || defined(IME_WITHOUT_XIM)) \
-	|| defined(PROTO)
     int
 is_autocmd_blocked(void)
 {
     return autocmd_blocked != 0;
 }
-#endif
 
 /*
  * Find next autocommand pattern that matches.
@@ -2272,8 +2252,9 @@ auto_next_pat(
     AutoCmd	*cp;
     char_u	*name;
     char	*s;
+    char_u	**sourcing_namep = &SOURCING_NAME;
 
-    VIM_CLEAR(sourcing_name);
+    VIM_CLEAR(*sourcing_namep);
 
     for (ap = apc->curpat; ap != NULL && !got_int; ap = ap->next)
     {
@@ -2293,16 +2274,16 @@ auto_next_pat(
 	    {
 		name = event_nr2name(apc->event);
 		s = _("%s Autocommands for \"%s\"");
-		sourcing_name = alloc(STRLEN(s)
+		*sourcing_namep = alloc(STRLEN(s)
 					      + STRLEN(name) + ap->patlen + 1);
-		if (sourcing_name != NULL)
+		if (*sourcing_namep != NULL)
 		{
-		    sprintf((char *)sourcing_name, s,
+		    sprintf((char *)*sourcing_namep, s,
 					       (char *)name, (char *)ap->pat);
 		    if (p_verbose >= 8)
 		    {
 			verbose_enter();
-			smsg(_("Executing %s"), sourcing_name);
+			smsg(_("Executing %s"), *sourcing_namep);
 			verbose_leave();
 		    }
 		}
@@ -2329,7 +2310,7 @@ auto_next_pat(
  * Returns allocated string, or NULL for end of autocommands.
  */
     char_u *
-getnextac(int c UNUSED, void *cookie, int indent UNUSED)
+getnextac(int c UNUSED, void *cookie, int indent UNUSED, int do_concat UNUSED)
 {
     AutoPatCmd	    *acp = (AutoPatCmd *)cookie;
     char_u	    *retval;
@@ -2415,7 +2396,7 @@ has_autocmd(event_T event, char_u *sfname, buf_T *buf)
     forward_slash(fname);
 #endif
 
-    for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
+    FOR_ALL_AUTOCMD_PATTERNS(event, ap)
 	if (ap->pat != NULL && ap->cmds != NULL
 	      && (ap->buflocal_nr == 0
 		? match_file_pat(NULL, &ap->reg_prog,
@@ -2435,7 +2416,6 @@ has_autocmd(event_T event, char_u *sfname, buf_T *buf)
     return retval;
 }
 
-#if defined(FEAT_CMDL_COMPL) || defined(PROTO)
 /*
  * Function given to ExpandGeneric() to obtain the list of autocommand group
  * names.
@@ -2520,7 +2500,6 @@ get_event_name(expand_T *xp UNUSED, int idx)
     return (char_u *)event_names[idx - augroups.ga_len].name;
 }
 
-#endif	// FEAT_CMDL_COMPL
 
 #if defined(FEAT_EVAL) || defined(PROTO)
 /*

@@ -9,28 +9,20 @@ default: nongui
 
 !include Make_all.mak
 
-# Omitted:
-# test2		"\\tmp" doesn't work.
-# test10	'errorformat' is different
-# test49	fails in various ways
-# test97	\{ and \$ are not escaped characters.
-
-SCRIPTS = $(SCRIPTS_ALL) $(SCRIPTS_MORE1) $(SCRIPTS_MORE4)
-
-TEST_OUTFILES = $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_WIN32) $(SCRIPTS_GUI)
+TEST_OUTFILES = $(SCRIPTS_FIRST)
 DOSTMP = dostmp
 DOSTMP_OUTFILES = $(TEST_OUTFILES:test=dostmp\test)
 DOSTMP_INFILES = $(DOSTMP_OUTFILES:.out=.in)
 
 .SUFFIXES: .in .out .res .vim
 
-nongui:	nolog $(SCRIPTS_FIRST) $(SCRIPTS) newtests report
+nongui:	nolog $(SCRIPTS_FIRST) newtests report
 
 small:	nolog report
 
-gui:	nolog $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_GUI) newtests report
+gui:	nolog $(SCRIPTS_FIRST) newtests report
 
-win32:	nolog $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_WIN32) newtests report
+win32:	nolog $(SCRIPTS_FIRST) newtests report
 
 # Copy the input files to dostmp, changing the fileformat to dos.
 $(DOSTMP_INFILES): $(*B).in
@@ -69,9 +61,14 @@ $(TEST_OUTFILES): $(DOSTMP)\$(*B).in
 $(SCRIPTS) $(SCRIPTS_GUI) $(SCRIPTS_WIN32) $(NEW_TESTS_RES): $(SCRIPTS_FIRST)
 
 report:
-	@echo ""
+	@rem without the +eval feature test_result.log is a copy of test.log
+	@if exist test.log ( copy /y test.log test_result.log > nul ) \
+		else ( echo No failures reported > test_result.log )
+	$(VIMPROG) -u NONE $(NO_INITS) -S summarize.vim messages
+	@echo.
 	@echo Test results:
-	@if exist test.log ( type test.log & echo TEST FAILURE & exit /b 1 ) \
+	@cmd /c type test_result.log
+	@if exist test.log ( echo TEST FAILURE & exit /b 1 ) \
 		else ( echo ALL DONE )
 
 clean:
@@ -92,20 +89,23 @@ clean:
 	-for /d %i in (X*) do @rmdir /s/q %i
 	-if exist viminfo del viminfo
 	-if exist test.log del test.log
+	-if exist test_result.log del test_result.log
 	-if exist messages del messages
 	-if exist benchmark.out del benchmark.out
 	-if exist opt_test.vim del opt_test.vim
 
 nolog:
 	-if exist test.log del test.log
+	-if exist test_result.log del test_result.log
 	-if exist messages del messages
 
-benchmark:
-	bench_re_freeze.out
+benchmark: test_bench_regexp.res
 
-bench_re_freeze.out: bench_re_freeze.vim
+test_bench_regexp.res: test_bench_regexp.vim
 	-if exist benchmark.out del benchmark.out
-	$(VIMPROG) -u dos.vim $(NO_INITS) $*.in
+	@echo $(VIMPROG) > vimcmd
+	$(VIMPROG) -u NONE $(NO_INITS) -S runtest.vim $*.vim
+	@del vimcmd
 	@IF EXIST benchmark.out ( type benchmark.out )
 
 # New style of tests uses Vim script with assert calls.  These are easier
@@ -134,5 +134,5 @@ test_gui_init.res: test_gui_init.vim
 
 test_options.res test_alot.res: opt_test.vim
 
-opt_test.vim: ../option.c gen_opt_test.vim
-	$(VIMPROG) -u NONE -S gen_opt_test.vim --noplugin --not-a-term ../option.c
+opt_test.vim: ../optiondefs.h gen_opt_test.vim
+	$(VIMPROG) -u NONE -S gen_opt_test.vim --noplugin --not-a-term ../optiondefs.h
